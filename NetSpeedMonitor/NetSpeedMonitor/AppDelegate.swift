@@ -9,6 +9,7 @@ struct AppTrafficInfo {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    let bundleIdentifier = "com.funning0423.nspm26"
     var statusItem: NSStatusItem!
     var menu: NSMenu!
     var timer: Timer?
@@ -48,7 +49,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     var plistPath: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents/com.netspeed.app.plist")
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents/\(bundleIdentifier).plist")
     }
     
     override init() {
@@ -66,7 +67,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         loadTrafficData()
         
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.title = "Nspm26"
+        configureStatusItem()
         
         createMenu()
         
@@ -79,6 +80,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let timer = timer {
             RunLoop.current.add(timer, forMode: .common)
         }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.showGlassPanel()
+        }
+    }
+    
+    func configureStatusItem() {
+        guard let button = statusItem.button else { return }
+        
+        button.title = "Nspm26"
+        button.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        button.image = nil
     }
     
     func setupReachability() {
@@ -728,7 +741,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if showUpload {
             titleParts.append("↑\(SpeedFormatter.formatSpeedShort(uploadSpeed))")
         }
-        statusItem.title = titleParts.isEmpty ? "Nspm26" : titleParts.joined(separator: " ")
+        statusItem.button?.title = titleParts.isEmpty ? "Nspm26" : titleParts.joined(separator: " ")
         
         if panelWindow?.isVisible == true {
             updateGlassView()
@@ -773,7 +786,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.netspeed.app</string>
+    <string>\(bundleIdentifier)</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/open</string>

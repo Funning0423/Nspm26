@@ -5,13 +5,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>zh_CN</string>
     <key>CFBundleExecutable</key>
-    <string>$(EXECUTABLE_NAME)</string>
+    <string>NetSpeedMonitor</string>
     <key>CFBundleIdentifier</key>
-    <string>com.netspeed.app</string>
+    <string>com.funning0423.nspm26</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
     <string>Nspm26</string>
+    <key>CFBundleDisplayName</key>
+    <string>Nspm26</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -19,12 +23,18 @@
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
-    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+    <string>10.13</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2024. All rights reserved.</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>此应用需要访问网络以监控网速</string>
+    <key>NSNetworkVolumesUsageDescription</key>
+    <string>此应用需要访问网络卷以监控网速</string>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>此应用需要访问可移动卷以监控网速</string>
 </dict>
 </plist>
