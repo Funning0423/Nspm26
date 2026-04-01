@@ -41,17 +41,66 @@ class NetworkReader {
     }
     
     private var interfaceID: String = ""
-    private var previousBandwidth: Bandwidth = Bandwidth()
+    private var previousBandwidthByInterface: [String: Bandwidth] = [:]
     private var totalBandwidth: Bandwidth = Bandwidth()
     
     init() {
-        interfaceID = primaryInterface
+        interfaceID = resolveInterfaceID()
     }
     
-    func readInterfaceBandwidth() -> (upload: Int64, download: Int64) {
+    private func resolveInterfaceID() -> String {
+        if !primaryInterface.isEmpty {
+            return primaryInterface
+        }
+        return findFallbackInterfaceID()
+    }
+    
+    private func refreshInterfaceID() -> String {
+        let resolved = resolveInterfaceID()
+        interfaceID = resolved
+        return resolved
+    }
+    
+    private func findFallbackInterfaceID() -> String {
+        var interfaceAddresses: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&interfaceAddresses) == 0, let first = interfaceAddresses else {
+            return ""
+        }
+        defer { freeifaddrs(interfaceAddresses) }
+        
+        var pointer: UnsafeMutablePointer<ifaddrs>? = first
+        while pointer != nil {
+            defer { pointer = pointer?.pointee.ifa_next }
+            guard let ptr = pointer else { break }
+            
+            let flags = ptr.pointee.ifa_flags
+            let name = String(cString: ptr.pointee.ifa_name)
+            
+            guard (flags & UInt32(IFF_UP)) != 0,
+                  (flags & UInt32(IFF_RUNNING)) != 0,
+                  (flags & UInt32(IFF_LOOPBACK)) == 0,
+                  !shouldIgnoreInterface(name),
+                  ptr.pointee.ifa_addr != nil,
+                  ptr.pointee.ifa_data != nil else {
+                continue
+            }
+            
+            return name
+        }
+        
+        return ""
+    }
+    
+    private func shouldIgnoreInterface(_ name: String) -> Bool {
+        let ignoredPrefixes = ["lo", "awdl", "llw", "anpi", "ap", "bridge", "gif", "stf"]
+        return ignoredPrefixes.contains { name.hasPrefix($0) }
+    }
+    
+    func readInterfaceBandwidth(interfaceID: String? = nil) -> (upload: Int64, download: Int64) {
         var interfaceAddresses: UnsafeMutablePointer<ifaddrs>?
         var totalUpload: Int64 = 0
         var totalDownload: Int64 = 0
+        let targetInterfaceID = interfaceID ?? refreshInterfaceID()
         
         guard getifaddrs(&interfaceAddresses) == 0 else {
             return (0, 0)
@@ -64,7 +113,7 @@ class NetworkReader {
             
             let interfaceName = String(cString: ptr.pointee.ifa_name)
             
-            if interfaceID.isEmpty || interfaceName == interfaceID {
+            if targetInterfaceID.isEmpty || interfaceName == targetInterfaceID {
                 if let data = ptr.pointee.ifa_data {
                     let networkData = data.assumingMemoryBound(to: if_data.self).pointee
                     totalUpload += Int64(networkData.ifi_obytes)
@@ -78,14 +127,15 @@ class NetworkReader {
     }
     
     func calculateBandwidth() -> Bandwidth {
-        let current = readInterfaceBandwidth()
+        let currentInterfaceID = refreshInterfaceID()
+        guard !currentInterfaceID.isEmpty else { return Bandwidth() }
+        
+        let current = readInterfaceBandwidth(interfaceID: currentInterfaceID)
         
         var bandwidth = Bandwidth()
         
-        if previousBandwidth.upload != 0 {
+        if let previousBandwidth = previousBandwidthByInterface[currentInterfaceID] {
             bandwidth.upload = current.upload - previousBandwidth.upload
-        }
-        if previousBandwidth.download != 0 {
             bandwidth.download = current.download - previousBandwidth.download
         }
         
@@ -95,8 +145,7 @@ class NetworkReader {
         totalBandwidth.upload += bandwidth.upload
         totalBandwidth.download += bandwidth.download
         
-        previousBandwidth.upload = current.upload
-        previousBandwidth.download = current.download
+        previousBandwidthByInterface[currentInterfaceID] = Bandwidth(upload: current.upload, download: current.download)
         
         return bandwidth
     }
@@ -110,11 +159,12 @@ class NetworkReader {
     }
     
     func getInterfaceDetails() -> NetworkInterface? {
-        guard !interfaceID.isEmpty else { return nil }
+        let currentInterfaceID = refreshInterfaceID()
+        guard !currentInterfaceID.isEmpty else { return nil }
         
         for interface in SCNetworkInterfaceCopyAll() as NSArray {
             if let bsdName = SCNetworkInterfaceGetBSDName(interface as! SCNetworkInterface),
-               bsdName as String == interfaceID,
+               bsdName as String == currentInterfaceID,
                let type = SCNetworkInterfaceGetInterfaceType(interface as! SCNetworkInterface),
                let displayName = SCNetworkInterfaceGetLocalizedDisplayName(interface as! SCNetworkInterface),
                let address = SCNetworkInterfaceGetHardwareAddressString(interface as! SCNetworkInterface) {
@@ -146,6 +196,7 @@ class NetworkReader {
         var interfaceAddresses: UnsafeMutablePointer<ifaddrs>?
         var ipv4: String?
         var ipv6: String?
+        let currentInterfaceID = refreshInterfaceID()
         
         guard getifaddrs(&interfaceAddresses) == 0 else {
             return (nil, nil)
@@ -155,7 +206,7 @@ class NetworkReader {
         while ptr != nil {
             let addr = ptr!.pointee
             
-            if String(cString: addr.ifa_name) == interfaceID {
+            if String(cString: addr.ifa_name) == currentInterfaceID {
                 var address = addr.ifa_addr.pointee
                 
                 guard address.sa_family == UInt8(AF_INET) || address.sa_family == UInt8(AF_INET6) else {
@@ -183,8 +234,9 @@ class NetworkReader {
     
     func getWiFiDetails() -> WiFiDetails {
         var details = WiFiDetails()
+        let currentInterfaceID = refreshInterfaceID()
         
-        if let interface = CWWiFiClient.shared().interface(withName: interfaceID) {
+        if let interface = CWWiFiClient.shared().interface(withName: currentInterfaceID) {
             if let ssid = interface.ssid() {
                 details.ssid = ssid
             }
@@ -211,11 +263,12 @@ class NetworkReader {
         var addrs: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&addrs) == 0, let first = addrs else { return false }
         defer { freeifaddrs(addrs) }
+        let currentInterfaceID = refreshInterfaceID()
         
         var ptr = first
         while true {
             let name = String(cString: ptr.pointee.ifa_name)
-            if name == interfaceID {
+            if name == currentInterfaceID {
                 return (ptr.pointee.ifa_flags & UInt32(IFF_UP)) != 0
             }
             if let next = ptr.pointee.ifa_next {

@@ -3,7 +3,7 @@
 # 设置变量
 APP_NAME="Nspm26"
 APP_PATH="release/$APP_NAME.app"
-DMG_PATH="release/$APP_NAME-v1.0.0.dmg"
+DMG_PATH="release/$APP_NAME-v1.0.1.dmg"
 BACKGROUND_PATH="release/background.png"
 ICON_PATH="DMGIcon.icns"
 
